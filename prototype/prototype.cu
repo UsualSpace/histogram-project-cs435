@@ -1,5 +1,5 @@
 /*
-Compile with `nvcc -arch=sm_60 test.cu`
+Compile with `nvcc -arch=sm_60 prototype.cu`
 
 input file can be created with something like `dd bs=1024 count=1 if=/dev/urandom of=./rndfile`
 
@@ -9,11 +9,15 @@ There is no bounds checking so beware
 
 The output shows 256 buckets with their counts, they should be around size/256 each
 
-The idea was to make a Mode (the last parameter) for each example from the book, e.g., plain CPU is mode 0, histogram_kernel_6 is called in mode 1, histogram_kernel_9 is called in mode 2, etc. but this is just some thing to get started with.
+The idea was to make a Mode (the last parameter) for each example from the book, e.g., plain CPU is mode 0,
+histogram_kernel_6 is called in mode 1, histogram_kernel_9 is called in mode 2, etc. but this is just some thing to get
+started with.
 
  */
 
+#include <cstdio>
 #include <cuda/atomic>
+#include <cuda_runtime.h>
 #include <stdio.h>
 
 enum Modes
@@ -23,6 +27,22 @@ enum Modes
 };
 static const int NUM_BINS = 256;
 static const int COARSE_FACTOR = 3; // TODO:
+
+#define CUDACHECK(err)                         \
+    do                                         \
+    {                                          \
+        cuda_check((err), __FILE__, __LINE__); \
+    } while (false)
+inline void cuda_check(cudaError_t error_code, const char *file, int line)
+{
+    if (error_code != cudaSuccess)
+    {
+        fprintf(stderr, "CUDA Error %d: %s. In file '%s' on line %d\n", error_code, cudaGetErrorString(error_code),
+                file, line);
+        fflush(stderr);
+        exit(error_code);
+    }
+}
 
 /* Fig 9.2
     your standard single threaded CPU solution
@@ -251,7 +271,6 @@ int main(int argc, const char *argv[])
 
     fread(data_host, img_size, 1, f);
     fclose(f);
-    printf("samples: %d %d\n", data_host[0], data_host[1]);
 
     for (int i = 0; i < NUM_BINS; i++)
     {
@@ -263,10 +282,11 @@ int main(int argc, const char *argv[])
 
     if (mode != Modes::CPU)
     {
-        cudaMalloc((void **)&data_device, img_size);
-        cudaMalloc((void **)&bins_device, bin_data_size);
-        cudaMemcpy(data_device, data_host, img_size, cudaMemcpyHostToDevice);
-        cudaMemcpy(bins_device, bins_host, bin_data_size, cudaMemcpyHostToDevice);
+        printf("Allocating and copying device memory\n");
+        CUDACHECK(cudaMalloc((void **)&data_device, img_size));
+        CUDACHECK(cudaMalloc((void **)&bins_device, bin_data_size));
+        CUDACHECK(cudaMemcpy(data_device, data_host, img_size, cudaMemcpyHostToDevice));
+        CUDACHECK(cudaMemcpy(bins_device, bins_host, bin_data_size, cudaMemcpyHostToDevice));
     }
 
     int iter = 0;
@@ -281,30 +301,35 @@ int main(int argc, const char *argv[])
         }
         else
         {
+            dim3 dimGrid(ceil(width * height / 1024.0));
             if (mode == Modes::GPU_SIMPLE)
             {
-                histogram_kernel_6<<<1, dim3(width, height, 1)>>>(data_device, bins_device, width, height);
+                histogram_kernel_6<<<dimGrid, dim3(1024)>>>(data_device, bins_device, width, height);
+                CUDACHECK(cudaGetLastError());
+                CUDACHECK(cudaDeviceSynchronize());
             }
             else
             {
                 // 6, 9, 10, 12, 14, 15
                 printf("Implement me\n");
             }
-            cudaDeviceSynchronize();
         }
     }
 
     if (mode != Modes::CPU)
     {
-        cudaMemcpy(bins_host, bins_device, bin_data_size, cudaMemcpyDeviceToHost);
-
-        cudaFree(data_device);
-        cudaFree(bins_device);
+        printf("Cleaning up device resources\n");
+        CUDACHECK(cudaMemcpy(bins_host, bins_device, bin_data_size, cudaMemcpyDeviceToHost));
+        CUDACHECK(cudaFree(data_device));
+        CUDACHECK(cudaFree(bins_device));
     }
 
     for (int i = 0; i < NUM_BINS; i++)
     {
-        printf("%d: %d; ", i, bins_host[i]);
+        if (bins_host[i] != 0)
+        {
+            printf("%d: %d; ", i, bins_host[i]);
+        }
     }
     printf("\n");
 
