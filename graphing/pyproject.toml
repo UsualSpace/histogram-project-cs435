@@ -1,0 +1,17 @@
+[project]
+name = "cs545_program2"
+version = "0.1.0"
+description = "Program 2 for CS545 Fall 2026"
+readme = "README.md"
+authors = [
+    { name = "Ed Norris", email = "4132634+ed-norris@users.noreply.github.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=7.4.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.2",
+    "pandas>=3.1.1",
+    "scikit-learn>=1.9.1",
+    "ucimlrepo>=0.0.7",
+]

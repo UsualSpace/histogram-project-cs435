@@ -15,6 +15,7 @@ started with.
 
  */
 
+#include <chrono>
 #include <cstdio>
 #include <cuda/atomic>
 #include <cuda_runtime.h>
@@ -36,6 +37,20 @@ inline void cuda_check(cudaError_t error_code, const char* file, int line) {
         exit(error_code);
     }
 }
+
+class Timer {
+  private:
+    // Type aliases to make accessing nested type easier
+    using Clock = std::chrono::steady_clock;
+    using Second = std::chrono::duration<double, std::ratio<1>>;
+
+    std::chrono::time_point<Clock> m_beg{Clock::now()};
+
+  public:
+    void reset() { m_beg = Clock::now(); }
+
+    double elapsed() const { return std::chrono::duration_cast<Second>(Clock::now() - m_beg).count(); }
+};
 
 void print_bins(unsigned int* bins) {
     for (int i = 0; i < NUM_BINS; i++) {
@@ -214,7 +229,7 @@ int main(int argc, const char* argv[]) {
     int mode = atoi(argv[4]);
     int iters = argc > 5 ? atoi(argv[5]) : 1;
 
-    if (width < 2 || height < 2 || mode < Modes::CPU || mode > Modes::GPU_SIMPLE) {
+    if (width < 2 || height < 2 || mode < Modes::CPU) {
         printf("Please enter reasonable values\n");
         exit(1);
     }
@@ -246,6 +261,7 @@ int main(int argc, const char* argv[]) {
         CUDACHECK(cudaMalloc((void**)&bins_device, bin_data_size));
     }
 
+    Timer t;
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -262,11 +278,12 @@ int main(int argc, const char* argv[]) {
             dim3 dimGrid(ceil(width * height / 1024.0));
             if (mode == Modes::GPU_SIMPLE) {
                 histogram_kernel_6<<<dimGrid, dim3(1024)>>>(data_device, bins_device, width, height);
+            } else if (mode == 15) {
+                histogram_kernel_15<<<dimGrid, dim3(1024)>>>(data_device, bins_device, width, height);
             } else {
-                // 6, 9, 10, 12, 14, 15
+                // the rest
                 printf("Implement me\n");
             }
-
             CUDACHECK(cudaGetLastError());
             CUDACHECK(cudaDeviceSynchronize()); // the next call is blocking so does this have any effect?
             CUDACHECK(cudaMemcpy(bins_host, bins_device, bin_data_size, cudaMemcpyDeviceToHost));
@@ -278,14 +295,16 @@ int main(int argc, const char* argv[]) {
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
 
-    if (mode != Modes::CPU) {
-        printf("Timing %f ms\n", milliseconds);
+    if (mode == Modes::CPU) {
+        printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, t.elapsed() * 1000);
+    } else {
+        printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, milliseconds);
     }
 
-    print_bins(bins_host);
+    // print_bins(bins_host);
 
     if (mode != Modes::CPU) {
-        printf("Cleaning up device resources\n");
+        // printf("Cleaning up device resources\n");
         CUDACHECK(cudaFree(data_device));
         CUDACHECK(cudaFree(bins_device));
     }
