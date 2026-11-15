@@ -45,11 +45,35 @@ class Timer {
     using Second = std::chrono::duration<double, std::ratio<1>>;
 
     std::chrono::time_point<Clock> m_beg{Clock::now()};
+    bool isCpu;
+    cudaEvent_t start, stop;
 
   public:
+    Timer(bool isCpu) {
+        this->isCpu = isCpu;
+
+        if (!isCpu) {
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            cudaEventRecord(start);
+        }
+    }
+
     void reset() { m_beg = Clock::now(); }
 
-    double elapsed() const { return std::chrono::duration_cast<Second>(Clock::now() - m_beg).count(); }
+    double elapsedMs() const {
+        if (isCpu) {
+            return std::chrono::duration_cast<Second>(Clock::now() - m_beg).count() * 1000;
+        } else {
+            cudaEventRecord(stop);
+
+            cudaEventSynchronize(stop);
+            float milliseconds = 0;
+            cudaEventElapsedTime(&milliseconds, start, stop);
+
+            return milliseconds;
+        }
+    }
 };
 
 void print_bins(unsigned int* bins) {
@@ -261,12 +285,7 @@ int main(int argc, const char* argv[]) {
         CUDACHECK(cudaMalloc((void**)&bins_device, bin_data_size));
     }
 
-    Timer t;
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    cudaEventRecord(start);
+    Timer t(mode == Modes::CPU);
 
     for (int iter = 0; iter < iters; iter++) {
         if (mode == Modes::CPU) {
@@ -289,17 +308,8 @@ int main(int argc, const char* argv[]) {
             CUDACHECK(cudaMemcpy(bins_host, bins_device, bin_data_size, cudaMemcpyDeviceToHost));
         }
     }
-    cudaEventRecord(stop);
 
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-
-    if (mode == Modes::CPU) {
-        printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, t.elapsed() * 1000);
-    } else {
-        printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, milliseconds);
-    }
+    printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, t.elapsedMs());
 
     // print_bins(bins_host);
 
