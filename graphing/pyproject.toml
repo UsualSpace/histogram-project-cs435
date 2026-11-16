@@ -1,7 +1,7 @@
 [project]
-name = "cs545_program2"
+name = "cs535_graphing"
 version = "0.1.0"
-description = "Program 2 for CS545 Fall 2026"
+description = "Graphing test code for 435/535 Accelerated Computing Fall 2026"
 readme = "README.md"
 authors = [
     { name = "Ed Norris", email = "4132634+ed-norris@users.noreply.github.com" }
