@@ -15,15 +15,23 @@ started with.
 
  */
 
+#include "json.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cuda/atomic>
 #include <cuda_runtime.h>
+#include <format>
+#include <fstream>
+#include <iostream>
 #include <stdio.h>
+
+using nlohmann::json;
+using std::string;
 
 enum Modes { CPU = 0, GPU_SIMPLE };
 static const int NUM_BINS = 256;
-static const int COARSE_FACTOR = 3; // TODO:
+static const int COARSE_FACTOR = 3;
+static string JSON_LOG = "log.json";
 
 #define CUDACHECK(err)                                                                                                 \
     do {                                                                                                               \
@@ -79,7 +87,7 @@ class Timer {
 void print_bins(unsigned int* bins) {
     for (int i = 0; i < NUM_BINS; i++) {
         if (bins[i] != 0) {
-            printf("%d: %d; ", i, bins[i]);
+            printf("\"%d\": %d%s", i, bins[i], i == (NUM_BINS - 1) ? "" : ",");
         }
     }
     printf("\n");
@@ -248,6 +256,7 @@ int main(int argc, const char* argv[]) {
         exit(1);
     }
 
+    string fname = argv[1];
     int width = atoi(argv[2]);
     int height = atoi(argv[3]);
     int mode = atoi(argv[4]);
@@ -258,9 +267,9 @@ int main(int argc, const char* argv[]) {
         exit(1);
     }
 
-    FILE* f = fopen(argv[1], "r");
+    FILE* f = fopen(fname.c_str(), "r");
     if (f == NULL) {
-        printf("Unable to open file %s", argv[1]);
+        printf("Unable to open file %s\n", fname.c_str());
         return 1;
     }
 
@@ -313,6 +322,15 @@ int main(int argc, const char* argv[]) {
 
     // print_bins(bins_host);
 
+    json j;
+    j["timeMs"] = t.elapsedMs();
+
+    std::vector<int> v;
+    for (int i = 0; i < NUM_BINS; i++) {
+        v.push_back(bins_host[i]);
+    }
+    j["results"] = v;
+
     if (mode != Modes::CPU) {
         // printf("Cleaning up device resources\n");
         CUDACHECK(cudaFree(data_device));
@@ -321,6 +339,22 @@ int main(int argc, const char* argv[]) {
 
     free(data_host);
     free(bins_host);
+
+    std::ifstream infile(JSON_LOG);
+    json data = json::parse(infile);
+    infile.close();
+
+    std::ofstream outfile(JSON_LOG);
+    j["meta"]["fname"] = fname;
+    j["meta"]["algo"] = mode;
+    j["meta"]["iters"] = iters;
+
+    unsigned long milliseconds_since_epoch =
+        std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
+
+    data[std::to_string(milliseconds_since_epoch)] = j;
+    outfile << std::setw(4) << data << std::endl;
+    outfile.close();
 
     return 0;
 }
