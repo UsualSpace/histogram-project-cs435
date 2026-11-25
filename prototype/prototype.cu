@@ -31,7 +31,7 @@ using std::string;
 enum Modes { CPU = 0, GPU_SIMPLE };
 static const int NUM_BINS = 256;
 static const int COARSE_FACTOR = 3;
-static string JSON_LOG = "log.json";
+static string JSON_LOG = "log_2026-11-25.json";
 
 #define CUDACHECK(err)                                                                                                 \
     do {                                                                                                               \
@@ -318,12 +318,13 @@ int main(int argc, const char* argv[]) {
         }
     }
 
-    printf("Time for size %d, algorithm %d, repeated %d: %f ms\n", height * width, mode, iters, t.elapsedMs());
+    double elapsedMs = t.elapsedMs();
+    printf("Time for size %d, algorithm %d, repeated %d: %.3f ms\n", height * width, mode, iters, elapsedMs);
 
     // print_bins(bins_host);
 
     json j;
-    j["timeMs"] = t.elapsedMs();
+    j["timeMs"] = elapsedMs;
 
     std::vector<int> v;
     for (int i = 0; i < NUM_BINS; i++) {
@@ -341,8 +342,11 @@ int main(int argc, const char* argv[]) {
     free(bins_host);
 
     std::ifstream infile(JSON_LOG);
-    json data = json::parse(infile);
-    infile.close();
+    json data;
+    if (infile.is_open()) {
+        data = json::parse(infile);
+        infile.close();
+    }
 
     std::ofstream outfile(JSON_LOG);
     j["meta"]["fname"] = fname;

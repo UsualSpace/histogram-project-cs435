@@ -1,9 +1,10 @@
 #!/bin/bash
 rm out*.log
+rm log*.json
 echo -e "\nnew run" >> out.log
 date >> out.log
 
-for fname in zeros rnd1mb image.pgm
+for fname in ../data/black_small ../data/random_small ../data/image_small.pgm
 do
     for mode in 0 1 15
     do
