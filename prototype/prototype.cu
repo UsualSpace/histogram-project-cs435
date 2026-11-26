@@ -307,6 +307,7 @@ int main(int argc, const char* argv[]) {
             if (mode == Modes::GPU_SIMPLE) {
                 histogram_kernel_6<<<dimGrid, dim3(1024)>>>(data_device, bins_device, width, height);
             } else if (mode == 15) {
+                // TODO: reduce based on coarsening factor
                 histogram_kernel_15<<<dimGrid, dim3(1024)>>>(data_device, bins_device, width, height);
             } else {
                 // the rest
